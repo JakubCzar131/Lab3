@@ -1,0 +1,16 @@
+# Zaleznosci pipeline'u uczenia maszynowego do detekcji upadkow.
+# Sprawdzone wersje minimalne. Mozna zaktualizowac w gore w razie potrzeby.
+
+# Praca z plikami CSV/XLSX KFall
+pandas>=1.5
+numpy>=1.23
+openpyxl>=3.1          # do odczytu *_label.xlsx
+
+# Trening sieci 1D-CNN i kwantyzacja INT8
+tensorflow>=2.13,<2.17 # Keras + TFLite Converter (TF 2.13-2.16 dziala stabilnie)
+
+# Split / wagi klas / metryki
+scikit-learn>=1.2
+
+# Wykresy (opcjonalnie, do raportowania krzywych uczenia i macierzy)
+matplotlib>=3.7
