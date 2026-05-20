@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Pliki wygenerowane przez pipeline (nie wersjonujemy modelu w repo)
+kfall_windows.npz
+model.tflite
+*.h.bak
+
+# Surowe dane KFall — pobierane lokalnie
+kfall/
+
+# Artefakty Arduino / PlatformIO
+.pio/
+build/
