@@ -113,7 +113,9 @@ def read_labels(label_path: Path) -> pd.DataFrame:
     rename_map: dict[str, str] = {}
     for col in df.columns:
         norm = _normalize_column_name(col)
-        if norm in {"taskcode", "taskid", "task"}:
+        if norm in {"taskcode", "taskid", "task"} or (
+            "taskcode" in norm and "taskid" in norm
+        ):
             rename_map[col] = "task"
         elif norm in {"trialid", "trial", "repetition", "rep"}:
             rename_map[col] = "trial"
@@ -145,10 +147,9 @@ def labels_for_trial(n_samples: int, trial_id: TrialId, labels_df: pd.DataFrame 
     if labels_df is None or labels_df.empty:
         return y
 
-    rows = labels_df[
-        (labels_df["task"].astype("Int64") == trial_id.task)
-        & (labels_df["trial"].astype("Int64") == trial_id.trial)
-    ]
+    task_col = labels_df["task"].fillna(-1).astype(int)
+    trial_col = labels_df["trial"].fillna(-1).astype(int)
+    rows = labels_df[(task_col == trial_id.task) & (trial_col == trial_id.trial)]
     if rows.empty:
         return y
 

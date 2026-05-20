@@ -158,7 +158,8 @@ Wynikiem sa:
 - `build/model.keras`,
 - `build/model.tflite`,
 - `build/normalization.h`,
-- kopia `normalization.h` w `firmware/03_fall_detector/`.
+- kopia `normalization.h` w `firmware/03_fall_detector/` i
+  `firmware/04_hybrid_lowpower/`.
 
 W raporcie zwroc szczegolna uwage na `F1 dla klasy FALL`. Wymaganiem projektu
 jest wynik powyzej `0.85` na sensownym podziale danych.
@@ -173,6 +174,7 @@ Skrypt tworzy:
 
 ```text
 firmware/03_fall_detector/model.h
+firmware/04_hybrid_lowpower/model.h
 ```
 
 ### Krok 5: inferencja na ESP32-S3
