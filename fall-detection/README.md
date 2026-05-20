@@ -193,3 +193,47 @@ fall-detection/
 | `GYRO_RANGE`  | +/- 1000 dps | Zakres zyroskopu                                     |
 
 Wiecej w `docs/architektura.md`.
+
+---
+
+## 9. Jak zweryfikowac (kryteria akceptacji)
+
+| Kryterium                                              | Jak sprawdzic                                                                  |
+|--------------------------------------------------------|--------------------------------------------------------------------------------|
+| `1_preprocess.py` generuje `.npz` bez bledow           | Uruchom `python 1_preprocess.py --data ../kfall`, oczekuj `[OK] Zapisano: ...kfall_windows.npz` |
+| F1 dla FALL > 0.85                                     | Po `python 2_train.py` zobacz linie `[KLUCZOWA METRYKA] F1 dla klasy FALL = ...` |
+| `model.tflite` < 100 KB                                | Komunikat `[OK] Zapisano model TFLite INT8: ... (N B)`, N < 102400.            |
+| Wejscie/wyjscie INT8                                   | `[OK] TFLM gotowy. ... in_scale=..., out_scale=...` na ESP32 (niefloat).       |
+| Szkice kompiluja sie na ESP32S3 Dev Module             | Otworz `.ino` w Arduino IDE, ustaw plytke, **Verify** dla kazdego z 00..04.    |
+| 03_fall_detector raportuje inferencje < 20 ms          | Sledz `inf=X.XX ms` w Serial Monitor.                                          |
+
+---
+
+## 10. Sciagawka komend (cala sciezka treningu)
+
+```bash
+cd fall-detection
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 1) preprocessing -> okna
+python python/1_preprocess.py \
+    --data ./kfall \
+    --out  ./kfall_windows.npz
+
+# 2) trening (random split). Dodaj --loso aby walidacja byla LOSO.
+python python/2_train.py \
+    --in  ./kfall_windows.npz \
+    --out_model  ./model.tflite \
+    --out_header ./firmware/03_fall_detector/normalization.h
+
+# 3) tflite -> tablica C
+python python/3_export_header.py \
+    --in  ./model.tflite \
+    --out ./firmware/03_fall_detector/model.h
+
+# 4) (opcjonalnie) hybryda — skopiuj te same naglowki:
+cp firmware/03_fall_detector/model.h         firmware/04_hybrid_lowpower/
+cp firmware/03_fall_detector/normalization.h firmware/04_hybrid_lowpower/
+```
+
