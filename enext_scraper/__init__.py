@@ -1,0 +1,2 @@
+"""enext.ua product scraper."""
+
