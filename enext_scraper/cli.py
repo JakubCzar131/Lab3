@@ -8,7 +8,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 from .checkpoint import CheckpointStore
-from .crawler import ProductScraper, discover_product_urls
+from .crawler import AccessBlockedError, ProductScraper, discover_product_urls
 from .excel import export_completed_products
 from .openai_writer import PolishDescriptionWriter
 
@@ -158,5 +158,9 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     configure_logging(args.log_level)
-    asyncio.run(run(args))
+    try:
+        asyncio.run(run(args))
+    except AccessBlockedError as exc:
+        LOGGER.error("%s", exc)
+        raise SystemExit(2) from exc
 
