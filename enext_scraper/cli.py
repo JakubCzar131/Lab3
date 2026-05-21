@@ -52,9 +52,10 @@ async def run(args: argparse.Namespace) -> None:
         LOGGER.info("Przywrócono %s przerwanych produktów do kolejki", reset_count)
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=not args.headful)
+        browser = None
         try:
             if not args.skip_discovery:
+                browser = await playwright.chromium.launch(headless=not args.headful)
                 LOGGER.info("Rozpoczynam skanowanie produktów z %s", args.base_url)
                 urls = await discover_product_urls(
                     browser,
@@ -66,9 +67,15 @@ async def run(args: argparse.Namespace) -> None:
                 inserted = store.add_urls(urls)
                 LOGGER.info("Discovery: %s URL-i produktów, %s nowych w checkpoint", len(urls), inserted)
 
-            await process_products(browser, store, args)
+            if store.processable_count(args.max_attempts):
+                if browser is None:
+                    browser = await playwright.chromium.launch(headless=not args.headful)
+                await process_products(browser, store, args)
+            else:
+                LOGGER.info("Brak produktów do przetworzenia, wykonuję tylko eksport ukończonych danych")
         finally:
-            await browser.close()
+            if browser is not None:
+                await browser.close()
 
     completed = store.completed_rows()
     export_completed_products(completed, args.output)

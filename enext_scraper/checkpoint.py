@@ -144,6 +144,19 @@ class CheckpointStore:
             ).fetchall()
         return {str(row["status"]): int(row["count"]) for row in rows}
 
+    def processable_count(self, max_attempts: int) -> int:
+        with self.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM products
+                WHERE status = 'pending'
+                   OR (status = 'failed' AND attempts < ?)
+                """,
+                (max_attempts,),
+            ).fetchone()
+        return int(row["count"])
+
     def completed_rows(self) -> list[sqlite3.Row]:
         with self.connection() as conn:
             return conn.execute(
