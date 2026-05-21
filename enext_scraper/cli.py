@@ -30,6 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-sitemaps", type=int, default=1000, help="Maksymalna liczba sitemap do odczytu")
     parser.add_argument("--model", default="gpt-4o-mini", help="Model OpenAI")
     parser.add_argument("--headful", action="store_true", help="Uruchom widoczną przeglądarkę")
+    parser.add_argument("--proxy-server", default="", help="Opcjonalny proxy Playwright, np. http://host:port")
+    parser.add_argument("--storage-state", type=Path, help="Plik cookies/storage_state Playwright")
     parser.add_argument("--skip-discovery", action="store_true", help="Użyj URL-i już zapisanych w checkpoint")
     parser.add_argument("--skip-openai", action="store_true", help="Tryb testowy bez OpenAI API")
     parser.add_argument("--product-limit", type=int, default=0, help="Limit produktów w tym uruchomieniu")
@@ -55,7 +57,7 @@ async def run(args: argparse.Namespace) -> None:
         browser = None
         try:
             if not args.skip_discovery:
-                browser = await playwright.chromium.launch(headless=not args.headful)
+                browser = await launch_browser(playwright, args)
                 LOGGER.info("Rozpoczynam skanowanie produktów z %s", args.base_url)
                 urls = await discover_product_urls(
                     browser,
@@ -63,13 +65,14 @@ async def run(args: argparse.Namespace) -> None:
                     timeout_ms=args.timeout_ms,
                     crawl_page_limit=args.crawl_page_limit,
                     max_sitemaps=args.max_sitemaps,
+                    context_options=context_options(args),
                 )
                 inserted = store.add_urls(urls)
                 LOGGER.info("Discovery: %s URL-i produktów, %s nowych w checkpoint", len(urls), inserted)
 
             if store.processable_count(args.max_attempts):
                 if browser is None:
-                    browser = await playwright.chromium.launch(headless=not args.headful)
+                    browser = await launch_browser(playwright, args)
                 await process_products(browser, store, args)
             else:
                 LOGGER.info("Brak produktów do przetworzenia, wykonuję tylko eksport ukończonych danych")
@@ -88,7 +91,8 @@ async def process_products(browser, store: CheckpointStore, args: argparse.Names
         user_agent=(
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/124.0 Safari/537.36 enext-scraper/1.0"
-        )
+        ),
+        **context_options(args),
     )
     writer = PolishDescriptionWriter(
         model=args.model,
@@ -135,6 +139,19 @@ async def process_products(browser, store: CheckpointStore, args: argparse.Names
         await asyncio.gather(*workers)
     finally:
         await context.close()
+
+
+async def launch_browser(playwright, args: argparse.Namespace):
+    launch_options = {"headless": not args.headful}
+    if args.proxy_server:
+        launch_options["proxy"] = {"server": args.proxy_server}
+    return await playwright.chromium.launch(**launch_options)
+
+
+def context_options(args: argparse.Namespace) -> dict[str, object]:
+    if args.storage_state:
+        return {"storage_state": str(args.storage_state)}
+    return {}
 
 
 def main() -> None:

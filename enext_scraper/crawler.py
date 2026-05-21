@@ -51,6 +51,10 @@ MANUFACTURER_LABELS = (
 )
 
 
+class AccessBlockedError(RuntimeError):
+    """Raised when the target site blocks the current browser session."""
+
+
 def normalize_url(url: str, base_url: str = "https://enext.ua/") -> str | None:
     absolute = urljoin(base_url, unescape(url.strip()))
     absolute, _fragment = urldefrag(absolute)
@@ -84,20 +88,26 @@ def sitemap_name_suggests_products(url: str) -> bool:
 
 
 async def fetch_text(page: Page, url: str, timeout_ms: int) -> str:
-    await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+    response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+    status = response.status if response else None
     content = await page.content()
+    body_text = ""
+    try:
+        body_text = await page.locator("body").inner_text(timeout=3000)
+    except Exception:
+        pass
+    assert_not_blocked(url, status, f"{content}\n{body_text}")
     if "<loc>" in content or "<sitemapindex" in content or "<urlset" in content:
         return content
-    try:
-        return await page.locator("body").inner_text(timeout=3000)
-    except Exception:
-        return content
+    return body_text or content
 
 
 async def sitemap_urls_from_robots(page: Page, base_url: str, timeout_ms: int) -> list[str]:
     robots_url = urljoin(base_url, "/robots.txt")
     try:
         text = await fetch_text(page, robots_url, timeout_ms)
+    except AccessBlockedError:
+        raise
     except Exception as exc:
         LOGGER.info("Nie udało się pobrać robots.txt (%s), używam domyślnego sitemap.xml", exc)
         return [urljoin(base_url, "/sitemap.xml")]
@@ -149,8 +159,9 @@ async def discover_product_urls(
     timeout_ms: int,
     crawl_page_limit: int,
     max_sitemaps: int,
+    context_options: dict[str, object] | None = None,
 ) -> list[str]:
-    context = await browser.new_context(user_agent=_user_agent())
+    context = await browser.new_context(user_agent=_user_agent(), **(context_options or {}))
     page = await context.new_page()
     product_urls: set[str] = set()
     seen_sitemaps: set[str] = set()
@@ -165,6 +176,8 @@ async def discover_product_urls(
             seen_sitemaps.add(normalized_sitemap)
             try:
                 text = await fetch_text(page, normalized_sitemap, timeout_ms)
+            except AccessBlockedError:
+                raise
             except Exception as exc:
                 LOGGER.warning("Pomijam sitemap %s: %s", normalized_sitemap, exc)
                 continue
@@ -212,9 +225,10 @@ async def crawl_for_product_urls(
             continue
         seen.add(normalized)
         try:
-            await page.goto(normalized, wait_until="domcontentloaded", timeout=timeout_ms)
+            response = await page.goto(normalized, wait_until="domcontentloaded", timeout=timeout_ms)
             await page.wait_for_timeout(300)
             html = await page.content()
+            assert_not_blocked(normalized, response.status if response else None, html)
             if is_product_html(html):
                 products.add(normalized)
             for link in await page.eval_on_selector_all(
@@ -226,6 +240,8 @@ async def crawl_for_product_urls(
                     if looks_like_product_url(child):
                         products.add(child)
                     queue.append(child)
+        except AccessBlockedError:
+            raise
         except Exception as exc:
             LOGGER.debug("Błąd crawl %s: %s", normalized, exc)
 
@@ -242,6 +258,21 @@ def is_product_html(html: str) -> bool:
     )
 
 
+def assert_not_blocked(url: str, status: int | None, text: str) -> None:
+    lowered = text.lower()
+    blocked_markers = (
+        "sorry, you have been blocked",
+        "cf-chl",
+        "cloudflare ray id",
+        "performance & security by cloudflare",
+    )
+    if status in {403, 429} and any(marker in lowered for marker in blocked_markers):
+        raise AccessBlockedError(
+            f"enext.ua blokuje bieżącą sesję Playwright dla {url}. "
+            "Uruchom z dozwolonego adresu IP, użyj --proxy-server albo przekaż cookies przez --storage-state."
+        )
+
+
 def _crawlable_path(url: str) -> bool:
     path = urlparse(url).path.lower()
     blocked = ("cart", "basket", "checkout", "login", "register", "compare", "wishlist")
@@ -256,9 +287,10 @@ class ProductScraper:
     async def scrape(self, url: str) -> ProductData:
         page = await self.context.new_page()
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
             await page.wait_for_timeout(500)
             html = await page.content()
+            assert_not_blocked(url, response.status if response else None, html)
             if not is_product_html(html):
                 LOGGER.debug("Strona nie wygląda jak produkt: %s", url)
             json_ld = await extract_json_ld(page)

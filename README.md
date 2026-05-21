@@ -58,6 +58,8 @@ python -m enext_scraper --skip-discovery
 - `--product-limit 10` - przetwarza maksymalnie 10 produktów w danym uruchomieniu.
 - `--skip-openai` - tryb testowy bez wywołań OpenAI API.
 - `--headful` - uruchamia widoczną przeglądarkę.
+- `--proxy-server http://host:port` - uruchamia Playwright przez wskazany proxy.
+- `--storage-state state.json` - używa zapisanego stanu cookies/localStorage Playwright.
 - `--log-level DEBUG` - bardziej szczegółowe logi.
 - `--crawl-page-limit 1000` - limit stron odwiedzanych w fallback crawlu.
 - `--model gpt-4o-mini` - model OpenAI używany do generowania opisów.
@@ -92,4 +94,8 @@ Parametr: wartość
 ```
 
 Prompt OpenAI wymusza użycie wyłącznie danych wejściowych i zabrania wymyślania parametrów.
+
+Jeśli `enext.ua` zablokuje sesję automatyczną przez Cloudflare, aplikacja kończy działanie z
+czytelnym komunikatem. Wtedy uruchom scraper z adresu IP, który ma dostęp do strony, albo użyj
+`--proxy-server` / `--storage-state`.
 
