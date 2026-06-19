@@ -19,7 +19,7 @@ export interface DictionaryRule {
   /** Czytelny powod (PL) pokazywany w panelu admina / logach. */
   reason: string;
   /** Slowa/frazy kluczowe (po normalizacji agresywnej). */
-  terms: string[];
+  terms?: string[];
   /** Dodatkowe wyrazenia regularne (opcjonalnie), testowane na 'basic'. */
   patterns?: RegExp[];
 }

@@ -13,7 +13,7 @@ export function getStripe(): Stripe {
   }
   if (!stripeClient) {
     stripeClient = new Stripe(env.STRIPE_SECRET_KEY as string, {
-      apiVersion: "2024-12-18.acacia",
+      // Uzywamy domyslnej wersji API przypietej do zainstalowanego SDK.
       typescript: true,
     });
   }
