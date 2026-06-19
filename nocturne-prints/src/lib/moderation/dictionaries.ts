@@ -118,8 +118,8 @@ export const DICTIONARY_RULES: DictionaryRule[] = [
       "lady gaga",
       "eminem",
     ],
-    // Heurystyka: "prezydent X", "premier X" itp.
-    patterns: [/\b(prezydent|premier|minister|poslanka|posel|senator)\b/i],
+    // Heurystyka: "prezydent X", "premier X" itp. (\w* lapie polska odmiane)
+    patterns: [/\b(prezydent|premier|minister|poslank|posel|posla|senator|krol|krolow|papiez)\w*/i],
   },
   // --- Styl konkretnego artysty / studia -> needs_manual_review ---
   {
