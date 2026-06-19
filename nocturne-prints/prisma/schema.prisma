@@ -1,0 +1,252 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+enum ProductType {
+  TSHIRT
+  HOODIE
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  MODERATION_PENDING
+  NEEDS_MANUAL_REVIEW
+  REJECTED
+  GENERATION_PENDING
+  GENERATED
+  PRODUCTION_READY
+  PRINTED
+  SHIPPED
+  CANCELLED
+}
+
+enum SafetyStatus {
+  ALLOWED
+  REJECTED
+  NEEDS_MANUAL_REVIEW
+}
+
+enum ModerationTargetType {
+  PROMPT
+  UPLOADED_IMAGE
+  GENERATED_DESIGN
+}
+
+enum ConsentType {
+  RIGHTS_TO_IMAGE
+  MYSTERY_NO_PREVIEW
+  CREATIVE_VARIANCE
+  NO_RETURN_CHANGE_OF_MIND
+  FACE_CONSENT
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum AuditActorType {
+  SYSTEM
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  role         Role     @default(ADMIN)
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Product {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  name        String
+  description String
+  type        ProductType
+  basePrice   Int
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  variants    ProductVariant[]
+  orderItems  OrderItem[]
+  orders      Order[]
+}
+
+model ProductVariant {
+  id             String      @id @default(cuid())
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sku            String      @unique
+  colorName      String
+  colorHex       String
+  availableSizes String[]
+  priceDelta     Int         @default(0)
+  mockupUrl      String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  orderItems     OrderItem[]
+  orders         Order[]
+}
+
+model Order {
+  id                  String             @id @default(cuid())
+  email               String
+  productId           String
+  product             Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId           String
+  variant             ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  size                String
+  color               String
+  customerPrompt      String
+  selectedStyle       String
+  transformationLevel String
+  status              OrderStatus        @default(PENDING_PAYMENT)
+  stripeSessionId     String?            @unique
+  stripePaymentIntent String?
+  rejectionReason     String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  orderItems          OrderItem[]
+  uploadedAssets      UploadedAsset[]
+  generatedDesigns    GeneratedDesign[]
+  moderationResults   ModerationResult[]
+  statusHistory       StatusHistory[]
+  consentLogs         ConsentLog[]
+  payments            Payment[]
+  shippingInfo        ShippingInfo?
+}
+
+model OrderItem {
+  id         String         @id @default(cuid())
+  orderId    String
+  order      Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId  String
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  quantity   Int            @default(1)
+  unitPrice  Int
+  totalPrice Int
+  size       String
+  color      String
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+}
+
+model UploadedAsset {
+  id               String       @id @default(cuid())
+  orderId          String
+  order            Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storageKey       String
+  originalFilename String
+  safeFilename     String
+  mimeType         String
+  size             Int
+  width            Int
+  height           Int
+  exifRemoved      Boolean      @default(false)
+  safetyStatus     SafetyStatus @default(NEEDS_MANUAL_REVIEW)
+  hasFace          Boolean      @default(false)
+  hasPossibleLogo  Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model GeneratedDesign {
+  id             String       @id @default(cuid())
+  orderId        String
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider       String
+  storageKey     String
+  promptUsed     String
+  safetyStatus   SafetyStatus @default(NEEDS_MANUAL_REVIEW)
+  generationMeta Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model ModerationResult {
+  id                   String               @id @default(cuid())
+  orderId              String
+  order                Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  targetType           ModerationTargetType
+  status               SafetyStatus
+  categories           String[]
+  reasons              String[]
+  confidence           Float
+  detectedText         String[]
+  faceDetected         Boolean?
+  possibleLogoDetected Boolean?
+  rawJson              Json
+  createdAt            DateTime             @default(now())
+}
+
+model StatusHistory {
+  id         String         @id @default(cuid())
+  orderId    String
+  order      Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  actorType  AuditActorType @default(SYSTEM)
+  actorId    String?
+  note       String?
+  createdAt  DateTime       @default(now())
+}
+
+model ConsentLog {
+  id          String      @id @default(cuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  consentType ConsentType
+  consentText String
+  ipAddress   String?
+  userAgent   String?
+  acceptedAt  DateTime    @default(now())
+}
+
+model Payment {
+  id                  String        @id @default(cuid())
+  orderId             String
+  order               Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  stripeSessionId     String?
+  stripePaymentIntent String?
+  amount              Int
+  currency            String
+  status              PaymentStatus @default(PENDING)
+  rawJson             Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+model ShippingInfo {
+  id             String    @id @default(cuid())
+  orderId        String    @unique
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fullName       String
+  line1          String
+  line2          String?
+  city           String
+  postalCode     String
+  country        String
+  phone          String?
+  carrier        String?
+  trackingNumber String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
