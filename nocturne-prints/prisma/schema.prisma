@@ -1,0 +1,323 @@
+// Nocturne Prints — Prisma schema.
+// Model danych dla sklepu z personalizowanymi koszulkami/bluzami typu "AI mystery print".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enumeracje
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum ProductType {
+  TSHIRT
+  HOODIE
+}
+
+enum OrderStatus {
+  pending_payment
+  paid
+  moderation_pending
+  needs_manual_review
+  rejected
+  generation_pending
+  generated
+  production_ready
+  printed
+  shipped
+  cancelled
+}
+
+enum DesignStyle {
+  dark_fantasy
+  occult
+  cyberpunk
+  gothic
+  surreal
+  cosmic_horror
+  vintage_horror
+}
+
+enum TransformationLevel {
+  subtle
+  medium
+  strong
+}
+
+enum ModerationStatus {
+  allowed
+  rejected
+  needs_manual_review
+}
+
+enum ModerationTarget {
+  prompt
+  uploaded_image
+  generated_design
+}
+
+enum SafetyStatus {
+  pending
+  allowed
+  rejected
+  needs_manual_review
+}
+
+enum ConsentType {
+  image_rights
+  mystery_no_preview
+  creative_variation
+  no_withdrawal_personalized
+  face_likeness
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+}
+
+// ---------------------------------------------------------------------------
+// Uzytkownicy / Admin
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(ADMIN)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  statusChanges StatusHistory[]
+}
+
+// ---------------------------------------------------------------------------
+// Katalog
+// ---------------------------------------------------------------------------
+
+model Product {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  name        String
+  type        ProductType
+  description String
+  basePrice   Int // w groszach
+  active      Boolean     @default(true)
+  mockupUrl   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  variants ProductVariant[]
+  orders   Order[]
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  color     String // czytelna nazwa, np. "Onyx"
+  colorHex  String // np. "#0a0a0a"
+  size      String // S, M, L, XL, XXL
+  sku       String   @unique
+  priceDiff Int      @default(0) // dodatkowa kwota w groszach
+  stock     Int      @default(100)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orders  Order[]
+
+  @@unique([productId, color, size])
+}
+
+// ---------------------------------------------------------------------------
+// Zamowienia
+// ---------------------------------------------------------------------------
+
+model Order {
+  id                  String              @id @default(cuid())
+  email               String
+  productId           String
+  variantId           String
+  size                String
+  color               String
+  customerPrompt      String
+  selectedStyle       DesignStyle
+  transformationLevel TransformationLevel
+  status              OrderStatus         @default(pending_payment)
+
+  amountTotal Int // w groszach (snapshot ceny w momencie zamowienia)
+  currency    String @default("pln")
+
+  stripeSessionId String?
+
+  rejectionReason String?
+  internalNotes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product        @relation(fields: [productId], references: [id])
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  items            OrderItem[]
+  uploadedAssets   UploadedAsset[]
+  generatedDesigns GeneratedDesign[]
+  moderationResults ModerationResult[]
+  statusHistory    StatusHistory[]
+  consents         ConsentLog[]
+  payment          Payment?
+  shippingInfo     ShippingInfo?
+
+  @@index([status])
+  @@index([email])
+  @@index([stripeSessionId])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  description String
+  quantity    Int      @default(1)
+  unitPrice   Int // w groszach
+  createdAt   DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Pliki / zdjecia
+// ---------------------------------------------------------------------------
+
+model UploadedAsset {
+  id               String       @id @default(cuid())
+  orderId          String
+  storageKey       String // klucz w adapterze storage (local/S3)
+  originalFilename String
+  mimeType         String
+  size             Int
+  width            Int?
+  height           Int?
+  exifRemoved      Boolean      @default(false)
+  safetyStatus     SafetyStatus @default(pending)
+  createdAt        DateTime     @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model GeneratedDesign {
+  id           String       @id @default(cuid())
+  orderId      String
+  storageKey   String
+  provider     String // np. "mock", "stable-diffusion-local"
+  productPrompt String // finalny prompt produkcyjny (juz oczyszczony)
+  safetyStatus SafetyStatus @default(pending)
+  createdAt    DateTime     @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// ---------------------------------------------------------------------------
+// Moderacja
+// ---------------------------------------------------------------------------
+
+model ModerationResult {
+  id         String           @id @default(cuid())
+  orderId    String
+  targetType ModerationTarget
+  status     ModerationStatus
+  categories String[]
+  reasons    String[]
+  confidence Float
+  rawJson    Json
+  createdAt  DateTime         @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([targetType])
+}
+
+// ---------------------------------------------------------------------------
+// Historia / audyt
+// ---------------------------------------------------------------------------
+
+model StatusHistory {
+  id         String      @id @default(cuid())
+  orderId    String
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  note       String?
+  changedById String?
+  actor      String      @default("system") // "system" | "admin:<email>" | "stripe"
+  createdAt  DateTime    @default(now())
+
+  order      Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedBy  User?  @relation(fields: [changedById], references: [id])
+
+  @@index([orderId])
+}
+
+model ConsentLog {
+  id          String      @id @default(cuid())
+  orderId     String
+  consentType ConsentType
+  consentText String // pelny tekst zgody pokazany klientowi (snapshot)
+  ipAddress   String?
+  userAgent   String?
+  acceptedAt  DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// ---------------------------------------------------------------------------
+// Platnosci / wysylka
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id                    String        @id @default(cuid())
+  orderId               String        @unique
+  provider              String        @default("stripe")
+  stripePaymentIntentId String?
+  amount                Int
+  currency              String        @default("pln")
+  status                PaymentStatus @default(pending)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model ShippingInfo {
+  id          String   @id @default(cuid())
+  orderId     String   @unique
+  fullName    String?
+  line1       String?
+  line2       String?
+  city        String?
+  postalCode  String?
+  country     String?
+  phone       String?
+  trackingUrl String?
+  carrier     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
