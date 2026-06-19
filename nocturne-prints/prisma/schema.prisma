@@ -201,7 +201,9 @@ model OrderItem {
 
 model UploadedAsset {
   id               String       @id @default(cuid())
-  orderId          String
+  // orderId jest opcjonalny: upload zachodzi w konfiguratorze ZANIM powstanie
+  // zamowienie. Asset jest podpinany do zamowienia przy jego tworzeniu.
+  orderId          String?
   storageKey       String // klucz w adapterze storage (local/S3)
   originalFilename String
   mimeType         String
@@ -209,10 +211,14 @@ model UploadedAsset {
   width            Int?
   height           Int?
   exifRemoved      Boolean      @default(false)
+  // Wstepny sygnal moderacji z momentu uploadu (UX). Kanoniczna moderacja
+  // i tak odbywa sie po platnosci w pipeline (fail-safe).
+  faceDetected     Boolean      @default(false)
+  prefilterStatus  SafetyStatus @default(pending)
   safetyStatus     SafetyStatus @default(pending)
   createdAt        DateTime     @default(now())
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }

@@ -1,0 +1,42 @@
+import Link from "next/link";
+import { Moon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BRAND } from "@/lib/brand-copy";
+
+const NAV = [
+  { href: "/katalog", label: "Katalog" },
+  { href: "/konfigurator", label: "Konfigurator" },
+  { href: "/#jak-to-dziala", label: "Jak to działa" },
+  { href: "/#faq", label: "FAQ" },
+];
+
+export function SiteHeader() {
+  return (
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+      <div className="container flex h-16 items-center justify-between">
+        <Link href="/" className="flex items-center gap-2" aria-label={`${BRAND.name} — strona główna`}>
+          <Moon className="h-5 w-5 text-gold" aria-hidden />
+          <span className="font-display text-lg font-semibold tracking-wide text-gradient">
+            {BRAND.name}
+          </span>
+        </Link>
+
+        <nav className="hidden items-center gap-6 md:flex" aria-label="Główna nawigacja">
+          {NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <Button asChild size="sm" variant="gold">
+          <Link href="/konfigurator">Przywołaj nadruk</Link>
+        </Button>
+      </div>
+    </header>
+  );
+}
